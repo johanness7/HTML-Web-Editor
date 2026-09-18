@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Web Editor</title>
+    
+    <!-- CodeMirror Stylesheets für Zeilennummern & Dark Theme -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#070b14',
+                        cardbg: '#0f172a',
+                        cardborder: '#1e293b',
+                        accent: '#6366f1',
+                        accenthover: '#4f46e5'
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        .CodeMirror {
+            height: 100% !important;
+            font-family: 'Fira Code', ui-monospace, monospace;
+            font-size: 13.5px;
+            background-color: #0f172a !important;
+            color: #f3f4f6 !important;
+        }
+        .CodeMirror-gutters {
+            background-color: #090e1b !important;
+            border-right: 1px solid #1e293b !important;
+            color: #4b5563 !important;
+        }
+        .CodeMirror-cursor {
+            border-left: 2px solid #6366f1 !important;
+        }
+        
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #070b14; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+        /* Animationen & Effekte */
+        @keyframes rippleEffect {
+            0% { transform: scale(0); opacity: 0.6; }
+            100% { transform: scale(4); opacity: 0; }
+        }
+        .ripple {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(0);
+            animation: rippleEffect 0.7s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+            pointer-events: none;
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.15), inset 0 0 15px rgba(99, 102, 241, 0.03); }
+            50% { box-shadow: 0 0 35px rgba(99, 102, 241, 0.35), inset 0 0 25px rgba(99, 102, 241, 0.1); }
+        }
+        .glow-active {
+            animation: pulseGlow 4s infinite ease-in-out;
+        }
+
+        @keyframes floatOrb1 {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(30px, -20px) scale(1.1); }
+        }
+        @keyframes floatOrb2 {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(-30px, 20px) scale(1.15); }
+        }
+        .orb-1 { animation: floatOrb1 8s infinite ease-in-out; }
+        .orb-2 { animation: floatOrb2 10s infinite ease-in-out; }
+
+        @keyframes modalFadeIn {
+            0% { opacity: 0; transform: scale(0.9) translateY(20px); filter: blur(10px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+        }
+        .modal-animate {
+            animation: modalFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes shimmerBg {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        .shimmer-effect {
+            background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.04) 50%, rgba(255,255,255,0) 100%);
+            background-size: 200% 100%;
+            animation: shimmerBg 5s infinite linear;
+        }
+
+        button, input, div, span {
+            transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
+            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+            transition-duration: 300ms;
+        }
+    </style>
+</head>
+<body class="bg-darkbg text-slate-100 h-screen flex flex-col overflow-hidden selection:bg-indigo-500 selection:text-white relative">
+
+    <!-- Animierte Ambient Hintergrundlichter -->
+    <div class="absolute top-0 left-1/4 w-[30rem] h-[30rem] bg-indigo-600/10 rounded-full blur-[140px] pointer-events-none orb-1"></div>
+    <div class="absolute bottom-0 right-1/4 w-[30rem] h-[30rem] bg-violet-600/10 rounded-full blur-[140px] pointer-events-none orb-2"></div>
+
+    <!-- Top Navigation / Toolbar -->
+    <header class="bg-cardbg/85 backdrop-blur-2xl border-b border-cardborder px-6 py-3.5 flex items-center justify-between shrink-0 z-20 shadow-2xl shadow-black/30">
+        <div class="flex items-center space-x-3.5 group cursor-pointer" id="logo-area">
+            <div class="bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 p-2.5 rounded-2xl shadow-lg shadow-indigo-500/30 text-white font-black text-sm tracking-widest transform group-hover:scale-110 group-hover:rotate-6 duration-500">&lt;/&gt;</div>
+            <div>
+                <h1 class="font-black text-base tracking-wide bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">HTML Web Editor</h1>
+                <div class="flex items-center space-x-2">
+                    <p id="current-project-name" class="text-xs text-slate-400 font-medium hover:text-indigo-400 transition cursor-pointer flex items-center space-x-1 py-0.5 px-2 rounded-lg hover:bg-slate-800/60">
+                        <span>Unbenanntes Projekt</span>
+                        <svg class="w-3 h-3 opacity-60 transform group-hover:translate-x-0.5 transition" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex items-center space-x-3">
+            <!-- Projekte Menü Button -->
+            <div class="relative">
+                <button id="projects-menu-btn" class="ripple-btn relative overflow-hidden bg-slate-800/90 hover:bg-slate-800 text-slate-200 border border-slate-700/60 hover:border-indigo-500/50 px-4 py-2 rounded-xl text-xs font-semibold shadow-md hover:shadow-indigo-500/20 flex items-center space-x-2 transform hover:-translate-y-1">
+                    <svg class="w-4 h-4 text-indigo-400 transform group-hover:rotate-12 transition" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                    <span>Projekte</span>
+                </button>
+                
+                <!-- Dropdown Menü für gespeicherte Projekte -->
+                <div id="projects-dropdown" class="absolute right-0 mt-2 w-80 bg-slate-900/95 border border-cardborder rounded-2xl shadow-2xl p-2.5 hidden z-50 backdrop-blur-2xl transform origin-top-right transition-all duration-300">
+                    <div class="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800 mb-1.5 flex justify-between items-center">
+                        <span>Gespeicherte Projekte</span>
+                        <span id="project-count" class="bg-indigo-600/30 text-indigo-300 px-2 py-0.5 rounded-full text-[10px] font-mono border border-indigo-500/20">0</span>
+                    </div>
+                    <div id="projects-list" class="max-h-64 overflow-y-auto space-y-1 pr-1">
+                        <!-- Wird per JS befüllt -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Neues Projekt Button -->
+            <button id="new-project-btn" class="ripple-btn relative overflow-hidden bg-slate-800/90 hover:bg-slate-800 text-slate-200 border border-slate-700/60 hover:border-emerald-500/50 px-4 py-2 rounded-xl text-xs font-semibold shadow-md hover:shadow-emerald-500/20 flex items-center space-x-2 transform hover:-translate-y-1">
+                <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path></svg>
+                <span>Neues Projekt</span>
+            </button>
+            
+            <div class="h-5 w-[1px] bg-slate-800 mx-1"></div>
+
+            <!-- Download Button -->
+            <button id="download-btn" class="ripple-btn relative overflow-hidden bg-slate-800/90 hover:bg-slate-800 text-slate-200 border border-slate-700/60 hover:border-amber-500/50 px-4 py-2 rounded-xl text-xs font-semibold shadow-md hover:shadow-amber-500/20 flex items-center space-x-2 transform hover:-translate-y-1">
+                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                <span>Download index.html</span>
+            </button>
+            
+            <!-- In neuem Tab Button -->
+            <button id="open-tab-btn" class="ripple-btn relative overflow-hidden bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white px-4 py-2 rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/30 flex items-center space-x-2 transform hover:-translate-y-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                <span>In neuem Tab</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace (Split Screen) -->
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 overflow-hidden z-10">
+        
+        <!-- Editor Section -->
+        <section class="flex flex-col bg-cardbg border border-cardborder rounded-2xl overflow-hidden shadow-2xl relative glow-active transform hover:scale-[1.002] transition duration-500">
+            <div class="shimmer-effect absolute inset-0 pointer-events-none"></div>
+            <div class="bg-slate-900/80 px-4 py-3 border-b border-cardborder flex justify-between items-center text-xs font-medium text-slate-400 relative z-10">
+                <div class="flex items-center space-x-2">
+                    <div class="flex space-x-1.5">
+                        <div class="w-3 h-3 rounded-full bg-red-500/80 shadow-md shadow-red-500/30 hover:scale-125 transition"></div>
+                        <div class="w-3 h-3 rounded-full bg-amber-500/80 shadow-md shadow-amber-500/30 hover:scale-125 transition"></div>
+                        <div class="w-3 h-3 rounded-full bg-emerald-500/80 shadow-md shadow-emerald-500/30 hover:scale-125 transition"></div>
+                    </div>
+                    <span class="pl-2 font-mono text-slate-200 font-semibold tracking-wider">Code Editor</span>
+                </div>
+            </div>
+            <div class="flex-1 overflow-hidden relative z-10">
+                <textarea id="code-editor"></textarea>
+            </div>
+        </section>
+
+        <!-- Preview Section -->
+        <section class="flex flex-col bg-cardbg border border-cardborder rounded-2xl overflow-hidden shadow-2xl relative transform hover:scale-[1.002] transition duration-500">
+            <div class="bg-slate-900/80 px-4 py-3 border-b border-cardborder flex justify-between items-center text-xs font-medium text-slate-400 relative z-10">
+                <div class="flex items-center space-x-2">
+                    <svg class="w-4 h-4 text-indigo-400 animate-pulse" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    <span class="font-mono text-slate-200 font-semibold tracking-wider">Live-Vorschau</span>
+                </div>
+            </div>
+            <div class="flex-1 bg-white relative">
+                <iframe id="preview-frame" class="w-full h-full border-0"></iframe>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal Dialog -->
+    <div id="project-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 hidden opacity-0 transition-opacity duration-300">
+        <div id="modal-box" class="bg-cardbg border border-cardborder rounded-3xl p-8 w-full max-w-md shadow-2xl shadow-indigo-500/20 modal-animate transform scale-95">
+            <div class="flex items-center justify-between mb-5">
+                <div class="flex items-center space-x-3">
+                    <div id="modal-icon-container" class="p-3 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path></svg>
+                    </div>
+                    <div>
+                        <h3 id="modal-title" class="text-lg font-bold text-white tracking-wide">Neues Projekt erstellen</h3>
+                        <p id="modal-subtitle" class="text-xs text-slate-400">Gib deinem Projekt einen Namen.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Projektname</label>
+                    <input type="text" id="modal-input" placeholder="z.B. Mein Projekt" class="w-full bg-slate-900 border border-slate-700/80 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-4 focus:ring-indigo-500/20 transition-all">
+                </div>
+
+                <div class="flex space-x-3 pt-3">
+                    <button id="modal-cancel-btn" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-3 rounded-xl font-semibold text-sm transition shadow-md transform hover:-translate-y-0.5">Abbrechen</button>
+                    <button id="modal-submit-btn" class="flex-1 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white py-3 rounded-xl font-semibold text-sm transition shadow-lg shadow-indigo-600/30 transform hover:-translate-y-0.5">Bestätigen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CodeMirror Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+
+    <script>
+        document.querySelectorAll('.ripple-btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                const circle = document.createElement('span');
+                const diameter = Math.max(this.clientWidth, this.clientHeight);
+                const radius = diameter / 2;
+                
+                circle.style.width = circle.style.height = `${diameter}px`;
+                circle.style.left = `${e.clientX - this.getBoundingClientRect().left - radius}px`;
+                circle.style.top = `${e.clientY - this.getBoundingClientRect().top - radius}px`;
+                circle.classList.add('ripple');
+                
+                const existingRipple = this.getElementsByClassName('ripple')[0];
+                if (existingRipple) existingRipple.remove();
+                
+                this.appendChild(circle);
+            });
+        });
+
+        const editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
+            mode: 'htmlmixed',
+            theme: 'dracula',
+            lineNumbers: true,
+            autoCloseTags: true,
+            autoCloseBrackets: true,
+            lineWrapping: true
+        });
+
+        const previewFrame = document.getElementById('preview-frame');
+        const projectNameLabel = document.getElementById('current-project-name');
+        const projectsDropdown = document.getElementById('projects-dropdown');
+        const projectsList = document.getElementById('projects-list');
+        const projectCountBadge = document.getElementById('project-count');
+
+        const projectModal = document.getElementById('project-modal');
+        const modalBox = document.getElementById('modal-box');
+        const modalTitle = document.getElementById('modal-title');
+        const modalSubtitle = document.getElementById('modal-subtitle');
+        const modalInput = document.getElementById('modal-input');
+        const modalSubmitBtn = document.getElementById('modal-submit-btn');
+        const modalCancelBtn = document.getElementById('modal-cancel-btn');
+
+        let modalCallback = null;
+
+        function showModal(title, subtitle, defaultValue, submitText, callback) {
+            modalTitle.textContent = title;
+            modalSubtitle.textContent = subtitle;
+            modalInput.value = defaultValue || '';
+            modalSubmitBtn.textContent = submitText;
+            modalCallback = callback;
+
+            projectModal.classList.remove('hidden');
+            setTimeout(() => {
+                projectModal.classList.remove('opacity-0');
+                modalBox.classList.remove('scale-95');
+                modalInput.focus();
+                modalInput.select();
+            }, 10);
+        }
+
+        function hideModal() {
+            projectModal.classList.add('opacity-0');
+            modalBox.classList.add('scale-95');
+            setTimeout(() => {
+                projectModal.classList.add('hidden');
+            }, 300);
+        }
+
+        modalSubmitBtn.addEventListener('click', () => {
+            if (modalCallback) modalCallback(modalInput.value);
+            hideModal();
+        });
+
+        modalCancelBtn.addEventListener('click', hideModal);
+        modalInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                if (modalCallback) modalCallback(modalInput.value);
+                hideModal();
+            } else if (e.key === 'Escape') {
+                hideModal();
+            }
+        });
+
+        const STORAGE_KEY_PROJECTS = 'html_editor_projects_v8';
+        const STORAGE_KEY_CURRENT = 'html_editor_current_id_v8';
+
+        function getProjects() {
+            const data = localStorage.getItem(STORAGE_KEY_PROJECTS);
+            return data ? JSON.parse(data) : {};
+        }
+
+        function saveProjects(projects) {
+            localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+        }
+
+        let projects = getProjects();
+        let currentProjectId = localStorage.getItem(STORAGE_KEY_CURRENT);
+
+        if (!currentProjectId || !projects[currentProjectId]) {
+            const newId = 'proj_' + Date.now();
+            projects[newId] = {
+                id: newId,
+                name: 'Mein Erstes Projekt',
+                code: '',
+                updated: Date.now()
+            };
+            saveProjects(projects);
+            currentProjectId = newId;
+            localStorage.setItem(STORAGE_KEY_CURRENT, currentProjectId);
+        }
+
+        function loadProject(id) {
+            if (!projects[id]) return;
+            currentProjectId = id;
+            localStorage.setItem(STORAGE_KEY_CURRENT, currentProjectId);
+            
+            const proj = projects[id];
+            editor.setValue(proj.code || '');
+            projectNameLabel.querySelector('span').textContent = proj.name;
+            updatePreview();
+            projectsDropdown.classList.add('hidden');
+        }
+
+        function updatePreview() {
+            previewFrame.srcdoc = editor.getValue();
+        }
+
+        loadProject(currentProjectId);
+
+        let saveTimeout;
+        editor.on('change', () => {
+            const code = editor.getValue();
+            updatePreview();
+
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                if (projects[currentProjectId]) {
+                    projects[currentProjectId].code = code;
+                    projects[currentProjectId].updated = Date.now();
+                    saveProjects(projects);
+                }
+            }, 300);
+        });
+
+        document.getElementById('projects-menu-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            renderProjectsList();
+            projectsDropdown.classList.toggle('hidden');
+        });
+
+        document.addEventListener('click', () => {
+            projectsDropdown.classList.add('hidden');
+        });
+
+        projectsDropdown.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        function renderProjectsList() {
+            projects = getProjects();
+            projectsList.innerHTML = '';
+            
+            const projectKeys = Object.keys(projects).sort((a, b) => projects[b].updated - projects[a].updated);
+            projectCountBadge.textContent = projectKeys.length;
+
+            if (projectKeys.length === 0) {
+                projectsList.innerHTML = '<div class="px-3 py-4 text-center text-xs text-slate-500">Keine Projekte vorhanden</div>';
+                return;
+            }
+
+            projectKeys.forEach(id => {
+                const proj = projects[id];
+                const isActive = id === currentProjectId;
+
+                const item = document.createElement('div');
+                item.className = `flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs cursor-pointer transition transform hover:scale-[1.02] ${isActive ? 'bg-indigo-600/25 text-indigo-200 font-semibold border border-indigo-500/40 shadow-md' : 'hover:bg-slate-800/80 text-slate-300'}`;
+                
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'flex-1 truncate pr-2 flex items-center space-x-2';
+                infoDiv.innerHTML = `<span class="w-2 h-2 rounded-full ${isActive ? 'bg-indigo-400 animate-pulse' : 'bg-slate-600'}"></span><span class="truncate">${proj.name}</span>`;
+                infoDiv.addEventListener('click', () => loadProject(id));
+
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'flex items-center space-x-1.5';
+
+                const editBtn = document.createElement('button');
+                editBtn.className = 'p-1.5 hover:text-indigo-400 text-slate-400 transition hover:bg-slate-800 rounded-lg';
+                editBtn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>';
+                editBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    projectsDropdown.classList.add('hidden');
+                    showModal('Projekt umbenennen', 'Gib dem Projekt einen neuen Namen.', proj.name, 'Speichern', (newName) => {
+                        if (newName && newName.trim()) {
+                            projects[id].name = newName.trim();
+                            saveProjects(projects);
+                            if (id === currentProjectId) {
+                                projectNameLabel.querySelector('span').textContent = newName.trim();
+                            }
+                            renderProjectsList();
+                        }
+                    });
+                });
+                actionsDiv.appendChild(editBtn);
+
+                if (projectKeys.length > 1) {
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'p-1.5 hover:text-red-400 text-slate-400 transition hover:bg-slate-800 rounded-lg';
+                    deleteBtn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>';
+                    deleteBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (confirm(`Projekt "${proj.name}" wirklich löschen?`)) {
+                            delete projects[id];
+                            saveProjects(projects);
+                            if (currentProjectId === id) {
+                                const remaining = Object.keys(projects);
+                                loadProject(remaining[0]);
+                            } else {
+                                renderProjectsList();
+                            }
+                        }
+                    });
+                    actionsDiv.appendChild(deleteBtn);
+                }
+
+                item.appendChild(infoDiv);
+                item.appendChild(actionsDiv);
+                projectsList.appendChild(item);
+            });
+        }
+
+        document.getElementById('new-project-btn').addEventListener('click', () => {
+            showModal('Neues Projekt', 'Gib deinem neuen Projekt einen Namen, bevor es losgeht.', 'Mein Projekt ' + (Object.keys(getProjects()).length + 1), 'Erstellen', (name) => {
+                if (!name || !name.trim()) name = 'Unbenanntes Projekt';
+                const newId = 'proj_' + Date.now();
+                projects = getProjects();
+                
+                projects[newId] = {
+                    id: newId,
+                    name: name.trim(),
+                    code: '',
+                    updated: Date.now()
+                };
+                
+                saveProjects(projects);
+                loadProject(newId);
+            });
+        });
+
+        function triggerRename() {
+            projects = getProjects();
+            const currentProj = projects[currentProjectId];
+            if (!currentProj) return;
+
+            showModal('Projekt umbenennen', 'Ändere den Namen deines aktuellen Projekts.', currentProj.name, 'Aktualisieren', (newName) => {
+                if (newName && newName.trim()) {
+                    currentProj.name = newName.trim();
+                    currentProj.updated = Date.now();
+                    saveProjects(projects);
+                    projectNameLabel.querySelector('span').textContent = newName.trim();
+                }
+            });
+        }
+
+        projectNameLabel.addEventListener('click', triggerRename);
+
+        document.getElementById('download-btn').addEventListener('click', () => {
+            const code = editor.getValue();
+            const blob = new Blob([code], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'index.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('open-tab-btn').addEventListener('click', () => {
+            const code = editor.getValue();
+            const newWindow = window.open('', '_blank');
+            if (newWindow) {
+                newWindow.document.open();
+                newWindow.document.write(code);
+                newWindow.document.close();
+            } else {
+                alert('Pop-up-Blocker hat das Öffnen des Tabs verhindert.');
+            }
+        });
+    </script>
+</body>
+</html>
